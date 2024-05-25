@@ -27,9 +27,11 @@ async fn repeatedly_try<
 >(
     do_this_function: OneTryFun,
     arg: ArgType,
-    ctx: FailLogContext,
-    fatal_logger: Option<FatalLoggerType>,
-    recoverable_logger: Option<RecoverableLoggerType>,
+    loggers: (
+        FailLogContext,
+        Option<FatalLoggerType>,
+        Option<RecoverableLoggerType>,
+    ),
 ) -> Result<SuccessType, FatalErr>
 where
     RecoverableErr: Retryable<FatalError = FatalErr>,
@@ -39,13 +41,13 @@ where
     FatalLoggerType: Fn(&FatalErr, Instant, &FailLogContext),
     RecoverableLoggerType: Fn(&RecoverableErr, Instant, &FailLogContext),
 {
-    //! it calls do_this)function with the provided argument repeatedly until success or until the wait time is None
+    //! it calls do_this_function with the provided argument repeatedly until success or until the wait time is None
     //! when it is None, it means that we have reached our breaking point, there is no more waiting to re-call the function
-    //! that we should do to try and get a success after repeatedly getting recoverable errors
+    //!     that is we should just give up
     //! otherwise we are just repeatedly getting recoverable errors and we wait for some time determined by when
-    //! which recoverable errors we saw and when
+    //!     which recoverable errors we saw and when
     //! when the entire thing results in a fatal error the chain of recoverable errors and final fatal error
-    //! go into the logging functions
+    //!     go into the logging functions
     let mut my_retriable_failures = Vec::<(RecoverableErr, Instant)>::with_capacity(5);
     loop {
         let cur_trial = do_this_function(arg.clone()).await;
@@ -59,13 +61,11 @@ where
                     my_retriable_failures.push((r, this_time));
                     async_std::task::sleep(how_long_to_wait).await
                 } else {
+                    let (ctx, fatal_logger, recoverable_logger) = loggers;
                     if let Some(recoverable_logger) = recoverable_logger {
-                        let _logging_futures = my_retriable_failures
-                            .iter()
-                            .map(|(a, b)| {
-                                recoverable_logger(a, *b, &ctx);
-                            })
-                            .collect::<Vec<_>>();
+                        my_retriable_failures.iter().for_each(|(a, b)| {
+                            recoverable_logger(a, *b, &ctx);
+                        });
                     }
                     let f = r.to_fatal();
                     if let Some(fatal_logger) = fatal_logger {
@@ -75,6 +75,16 @@ where
                 }
             }
             RetryableResult::Fatal(f) => {
+                let this_time = Instant::now();
+                let (ctx, fatal_logger, recoverable_logger) = loggers;
+                if let Some(recoverable_logger) = recoverable_logger {
+                    my_retriable_failures.iter().for_each(|(a, b)| {
+                        recoverable_logger(a, *b, &ctx);
+                    });
+                }
+                if let Some(fatal_logger) = fatal_logger {
+                    fatal_logger(&f, this_time, &ctx);
+                }
                 return Err(f);
             }
         }
@@ -133,6 +143,12 @@ mod test {
         }
     }
 
+    #[allow(dead_code)]
+    fn dummy_logger1(_error: &RetryingStatusCode, _time: std::time::Instant, _ctx: &()) {}
+
+    #[allow(dead_code)]
+    fn dummy_logger2(_error: &StatusCode, _time: std::time::Instant, _ctx: &()) {}
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn first_test() {
         use super::repeatedly_try;
@@ -150,11 +166,9 @@ mod test {
                 }
             }
         }
-        fn dummy_logger1(_error: &RetryingStatusCode, _time: std::time::Instant, _ctx: &()) {}
-        fn dummy_logger2(_error: &StatusCode, _time: std::time::Instant, _ctx: &()) {}
-        let z = repeatedly_try(one_try, 4, (), Some(dummy_logger2), Some(dummy_logger1)).await;
+        let z = repeatedly_try(one_try, 4, ((), Some(dummy_logger2), Some(dummy_logger1))).await;
         assert_eq!(z, Ok(2));
-        let z = repeatedly_try(one_try, 3, (), Some(dummy_logger2), Some(dummy_logger1)).await;
+        let z = repeatedly_try(one_try, 3, ((), Some(dummy_logger2), Some(dummy_logger1))).await;
         if z.is_ok() {
             assert_eq!(z, Ok(1));
         } else {
