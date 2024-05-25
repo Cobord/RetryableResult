@@ -14,17 +14,30 @@ where
 }
 
 #[allow(dead_code)]
-async fn repeatedly_try<SuccessType, RecoverableErr, FatalErr, ArgType, OneTryFunc, Fut>(
-    do_this_function: OneTryFunc,
+async fn repeatedly_try<
+    SuccessType,
+    RecoverableErr,
+    FatalErr,
+    ArgType,
+    OneTryFun,
+    FailLogContext,
+    Fut0,
+    FatalLoggerType,
+    RecoverableLoggerType,
+>(
+    do_this_function: OneTryFun,
     arg: ArgType,
-    fatal_logger: Option<fn(&FatalErr, Instant) -> ()>,
-    recoverable_logger: Option<fn(&RecoverableErr, Instant) -> ()>,
+    ctx: FailLogContext,
+    fatal_logger: Option<FatalLoggerType>,
+    recoverable_logger: Option<RecoverableLoggerType>,
 ) -> Result<SuccessType, FatalErr>
 where
     RecoverableErr: Retryable<FatalError = FatalErr>,
     ArgType: Sized + Clone,
-    OneTryFunc: Fn(ArgType) -> Fut,
-    Fut: Future<Output = RetryableResult<SuccessType, RecoverableErr, FatalErr>>,
+    OneTryFun: Fn(ArgType) -> Fut0,
+    Fut0: Future<Output = RetryableResult<SuccessType, RecoverableErr, FatalErr>>,
+    FatalLoggerType: Fn(&FatalErr, Instant, &FailLogContext),
+    RecoverableLoggerType: Fn(&RecoverableErr, Instant, &FailLogContext),
 {
     //! it calls do_this)function with the provided argument repeatedly until success or until the wait time is None
     //! when it is None, it means that we have reached our breaking point, there is no more waiting to re-call the function
@@ -46,14 +59,17 @@ where
                     my_retriable_failures.push((r, this_time));
                     async_std::task::sleep(how_long_to_wait).await
                 } else {
-                    if let Some(rl) = recoverable_logger {
-                        for (a, b) in my_retriable_failures.iter() {
-                            rl(a, *b);
-                        }
+                    if let Some(recoverable_logger) = recoverable_logger {
+                        let _logging_futures = my_retriable_failures
+                            .iter()
+                            .map(|(a, b)| {
+                                recoverable_logger(a, *b, &ctx);
+                            })
+                            .collect::<Vec<_>>();
                     }
                     let f = r.to_fatal();
-                    if let Some(fl) = fatal_logger {
-                        fl(&f, this_time);
+                    if let Some(fatal_logger) = fatal_logger {
+                        fatal_logger(&f, this_time, &ctx);
                     }
                     return Err(f);
                 }
@@ -134,9 +150,11 @@ mod test {
                 }
             }
         }
-        let z = repeatedly_try(one_try, 4, None, None).await;
+        fn dummy_logger1(_error: &RetryingStatusCode, _time: std::time::Instant, _ctx: &()) {}
+        fn dummy_logger2(_error: &StatusCode, _time: std::time::Instant, _ctx: &()) {}
+        let z = repeatedly_try(one_try, 4, (), Some(dummy_logger2), Some(dummy_logger1)).await;
         assert_eq!(z, Ok(2));
-        let z = repeatedly_try(one_try, 3, None, None).await;
+        let z = repeatedly_try(one_try, 3, (), Some(dummy_logger2), Some(dummy_logger1)).await;
         if z.is_ok() {
             assert_eq!(z, Ok(1));
         } else {
