@@ -67,13 +67,24 @@ where
 
 mod test {
     use crate::retryable::Retryable;
-    use http::status::StatusCode;
+    use http::status::{InvalidStatusCode, StatusCode};
 
-    impl Retryable for StatusCode {
+    #[repr(transparent)]
+    struct RetryingStatusCode(StatusCode);
+
+    impl RetryingStatusCode {
+        #[allow(dead_code)]
+        fn from_u16(u: u16) -> Result<RetryingStatusCode, InvalidStatusCode> {
+            let z = StatusCode::from_u16(u)?;
+            Ok(Self(z))
+        }
+    }
+
+    impl Retryable for RetryingStatusCode {
         type FatalError = StatusCode;
 
         fn to_fatal(self) -> Self::FatalError {
-            self
+            self.0
         }
 
         fn wait_time(
@@ -111,14 +122,16 @@ mod test {
     async fn first_test() {
         use super::repeatedly_try;
         use crate::retryable::RetryableResult;
-        async fn one_try(u: u8) -> RetryableResult<u8, StatusCode, StatusCode> {
+        async fn one_try(u: u8) -> RetryableResult<u8, RetryingStatusCode, StatusCode> {
             if u % 2 == 0 {
                 RetryableResult::GoodResult(u >> 1)
             } else {
                 if rand::random() {
                     RetryableResult::GoodResult(u >> 1)
                 } else {
-                    RetryableResult::Retryable(StatusCode::from_u16(200).expect("200 is valid"))
+                    RetryableResult::Retryable(
+                        RetryingStatusCode::from_u16(200).expect("200 is valid"),
+                    )
                 }
             }
         }
@@ -128,7 +141,7 @@ mod test {
         if z.is_ok() {
             assert_eq!(z, Ok(1));
         } else {
-            assert_eq!(z,Err(StatusCode::from_u16(200).expect("200 is valid")));
+            assert_eq!(z, Err(StatusCode::from_u16(200).expect("200 is valid")));
         }
     }
 }
