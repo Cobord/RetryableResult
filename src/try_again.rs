@@ -75,8 +75,7 @@ mod test {
     impl RetryingStatusCode {
         #[allow(dead_code)]
         fn from_u16(u: u16) -> Result<RetryingStatusCode, InvalidStatusCode> {
-            let z = StatusCode::from_u16(u)?;
-            Ok(Self(z))
+            StatusCode::from_u16(u).map(Self)
         }
     }
 
