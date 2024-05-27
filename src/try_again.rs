@@ -1,7 +1,7 @@
 //! when we have something that returns both recoverable and nonrecoverable errors
 //! as it's error values, try repeatedly until
 //!     - success
-//!     - there are enough recoverable errors that the wait_time on Retryable says time to give up
+//!     - there are enough recoverable errors that the wait_time on Retryable says it is time to give up
 //!     - a fatal error
 
 use crate::retryable::{Retryable, RetryableResult};
@@ -28,7 +28,7 @@ async fn repeatedly_try<
     do_this_function: OneTryFun,
     arg: ArgType,
     loggers: (
-        FailLogContext,
+        &mut FailLogContext,
         Option<FatalLoggerType>,
         Option<RecoverableLoggerType>,
     ),
@@ -38,8 +38,8 @@ where
     ArgType: Sized + Clone,
     OneTryFun: Fn(ArgType) -> Fut0,
     Fut0: Future<Output = RetryableResult<SuccessType, RecoverableErr, FatalErr>>,
-    FatalLoggerType: Fn(&FatalErr, Instant, &FailLogContext),
-    RecoverableLoggerType: Fn(&RecoverableErr, Instant, &FailLogContext),
+    FatalLoggerType: Fn(&FatalErr, Instant, &mut FailLogContext),
+    RecoverableLoggerType: Fn(&RecoverableErr, Instant, &mut FailLogContext),
 {
     //! it calls do_this_function with the provided argument repeatedly until success or until the wait time is None
     //! when it is None, it means that we have reached our breaking point, there is no more waiting to re-call the function
@@ -64,12 +64,12 @@ where
                     let (ctx, fatal_logger, recoverable_logger) = loggers;
                     if let Some(recoverable_logger) = recoverable_logger {
                         my_retriable_failures.iter().for_each(|(a, b)| {
-                            recoverable_logger(a, *b, &ctx);
+                            recoverable_logger(a, *b, ctx);
                         });
                     }
                     let f = r.to_fatal();
                     if let Some(fatal_logger) = fatal_logger {
-                        fatal_logger(&f, this_time, &ctx);
+                        fatal_logger(&f, this_time, ctx);
                     }
                     return Err(f);
                 }
@@ -79,11 +79,11 @@ where
                 let (ctx, fatal_logger, recoverable_logger) = loggers;
                 if let Some(recoverable_logger) = recoverable_logger {
                     my_retriable_failures.iter().for_each(|(a, b)| {
-                        recoverable_logger(a, *b, &ctx);
+                        recoverable_logger(a, *b, ctx);
                     });
                 }
                 if let Some(fatal_logger) = fatal_logger {
-                    fatal_logger(&f, this_time, &ctx);
+                    fatal_logger(&f, this_time, ctx);
                 }
                 return Err(f);
             }
@@ -144,10 +144,10 @@ mod test {
     }
 
     #[allow(dead_code)]
-    fn dummy_logger1(_error: &RetryingStatusCode, _time: std::time::Instant, _ctx: &()) {}
+    fn dummy_logger1(_error: &RetryingStatusCode, _time: std::time::Instant, _ctx: &mut ()) {}
 
     #[allow(dead_code)]
-    fn dummy_logger2(_error: &StatusCode, _time: std::time::Instant, _ctx: &()) {}
+    fn dummy_logger2(_error: &StatusCode, _time: std::time::Instant, _ctx: &mut ()) {}
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn first_test() {
@@ -166,9 +166,19 @@ mod test {
                 }
             }
         }
-        let z = repeatedly_try(one_try, 4, ((), Some(dummy_logger2), Some(dummy_logger1))).await;
+        let z = repeatedly_try(
+            one_try,
+            4,
+            (&mut (), Some(dummy_logger2), Some(dummy_logger1)),
+        )
+        .await;
         assert_eq!(z, Ok(2));
-        let z = repeatedly_try(one_try, 3, ((), Some(dummy_logger2), Some(dummy_logger1))).await;
+        let z = repeatedly_try(
+            one_try,
+            3,
+            (&mut (), Some(dummy_logger2), Some(dummy_logger1)),
+        )
+        .await;
         if z.is_ok() {
             assert_eq!(z, Ok(1));
         } else {
