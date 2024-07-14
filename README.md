@@ -11,7 +11,7 @@ The recoverable errors must also have a way to determine how long to wait given 
 
 # Try Repeatedly
 
-We have an asynchronous function that besides the good results can return recovarable and nonrecoverable errors.
+We have an asynchronous function that besides the good results can return recoverable and nonrecoverable errors.
 
 We have another asynchronous function which repeatedly tries this function until either
   - success
