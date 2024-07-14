@@ -1,10 +1,13 @@
 # Retryable Result
 
 Three way enumeration with type for successful values, recoverable errors and nonrecoverable errors.
+
 The recoverable errors must have a way to translate into nonrecoverable errors for the case of getting so many recoverable errors that is just time to give up.
+
 The recoverable errors must also have a way to determine how long to wait given the information of what previous recoverable errors were received and when.
-  For example, the policy might be to see a whole bunch of recoverable error messages that said some process was too busy and it says to wait twice as long
-  before trying again in order to give whatever was being a bottleneck time to clear up.
+- The policy might be to see a whole bunch of recoverable error messages that said some process was too busy and it says to wait twice as long before trying again in order to give whatever was being a bottleneck time to clear up until some time threshold.
+- The policy might be to wait a specific amount of time regardless of what was seen before until a max number of times when it says None to indicate give up.
+- There should not be a sequence of recoverable errors which keeps going always producing a duration to wait. At some point it should say None to indicate giving up.
 
 # Try Repeatedly
 
