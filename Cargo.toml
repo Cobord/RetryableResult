@@ -3,7 +3,7 @@ name = "retryable-result"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-descripton = "repeatedly try on some recoverable errors until too many or a fatal error"
+description = "repeatedly try on some recoverable errors until too many or a fatal error"
 repository = "https://github.com/Cobord/RetryableResult/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
