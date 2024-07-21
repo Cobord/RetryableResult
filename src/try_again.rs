@@ -7,6 +7,7 @@
 use crate::retryable::{Retryable, RetryableResult};
 use std::{future::Future, time::Instant};
 
+#[allow(dead_code)]
 trait ArgType
 where
     Self: Sized + Clone,
