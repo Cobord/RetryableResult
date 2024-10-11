@@ -1,7 +1,7 @@
 //! when we have something that returns both recoverable and nonrecoverable errors
 //! as it's error values, try repeatedly until
 //!     - success
-//!     - there are enough recoverable errors that the wait_time on Retryable says it is time to give up
+//!     - there are enough recoverable errors that the `wait_time` on `Retryable` says it is time to give up
 //!     - a fatal error
 
 use crate::retryable::{Retryable, RetryableResult};
@@ -14,6 +14,7 @@ where
 {
 }
 
+#[allow(clippy::needless_for_each)]
 #[allow(dead_code)]
 async fn repeatedly_try<
     SuccessType,
@@ -42,7 +43,7 @@ where
     FatalLoggerType: Fn(&FatalErr, Instant, &mut FailLogContext),
     RecoverableLoggerType: Fn(&RecoverableErr, Instant, &mut FailLogContext),
 {
-    //! it calls do_this_function with the provided argument repeatedly until success or until the wait time is None
+    //! it calls `do_this_function` with the provided argument repeatedly until success or until the wait time is None
     //! when it is None, it means that we have reached our breaking point, there is no more waiting to re-call the function
     //!     that is we should just give up
     //! otherwise we are just repeatedly getting recoverable errors and we wait for some time determined by when
@@ -60,7 +61,7 @@ where
                 let this_time = Instant::now();
                 if let Some(how_long_to_wait) = r.wait_time(this_time, &my_retriable_failures) {
                     my_retriable_failures.push((r, this_time));
-                    async_std::task::sleep(how_long_to_wait).await
+                    async_std::task::sleep(how_long_to_wait).await;
                 } else {
                     let (ctx, fatal_logger, recoverable_logger) = loggers;
                     if let Some(recoverable_logger) = recoverable_logger {
@@ -147,6 +148,7 @@ mod test {
     #[allow(dead_code)]
     fn dummy_logger1(_error: &RetryingStatusCode, _time: std::time::Instant, _ctx: &mut ()) {}
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     #[allow(dead_code)]
     fn dummy_logger2(_error: &StatusCode, _time: std::time::Instant, _ctx: &mut ()) {}
 
@@ -155,6 +157,7 @@ mod test {
         use super::repeatedly_try;
         use crate::retryable::RetryableResult;
         async fn one_try(u: u8) -> RetryableResult<u8, RetryingStatusCode, StatusCode> {
+            #[allow(clippy::collapsible_else_if)]
             if u % 2 == 0 {
                 RetryableResult::GoodResult(u >> 1)
             } else {

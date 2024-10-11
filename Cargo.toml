@@ -1,6 +1,6 @@
 [package]
 name = "retryable-result"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "repeatedly try on some recoverable errors until too many or a fatal error"
