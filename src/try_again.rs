@@ -16,7 +16,7 @@ where
 
 #[allow(clippy::needless_for_each)]
 #[allow(dead_code)]
-async fn repeatedly_try<
+pub async fn repeatedly_try<
     SuccessType,
     RecoverableErr,
     FatalErr,
@@ -50,6 +50,8 @@ where
     //!     which recoverable errors we saw and when
     //! when the entire thing results in a fatal error the chain of recoverable errors and final fatal error
     //!     go into the logging functions
+    //! # Errors
+    //! when there are too many recoverable errors to a level of a breaking point or one of the steps gave a `FatalErr` directly
     let mut my_retriable_failures = Vec::<(RecoverableErr, Instant)>::with_capacity(5);
     loop {
         let cur_trial = do_this_function(arg.clone()).await;
